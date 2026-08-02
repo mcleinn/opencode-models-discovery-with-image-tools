@@ -38,6 +38,7 @@ type HostClient = 'opencode' | 'mimocode'
 const RESOLVED_PROVIDERS_TIMEOUT_MS = 250
 const DEFAULT_LITELLM_MODEL_INFO_ENDPOINT = '/v1/model/info'
 const defaultProviderModelStore = new ProviderModelStore()
+const OPENAI_PROVIDER_NPM = '@ai-sdk/openai'
 
 export const providerModelStoreTestUtils = {
   setStore(store: ProviderModelStore): void {
@@ -49,6 +50,56 @@ export const providerModelStoreTestUtils = {
 }
 let currentProviderModelStore = defaultProviderModelStore
 const injectedModelsByConfig = new WeakMap<object, Map<string, Map<string, unknown>>>()
+
+function isImageToolResultsEnabled(value: unknown): boolean {
+  return value === true || (!!value && typeof value === 'object' && (value as any).enabled === true)
+}
+
+function getImageToolResultsProviderNpm(value: unknown): string {
+  if (value && typeof value === 'object') {
+    const providerNpm = (value as any).providerNpm
+    if (typeof providerNpm === 'string' && providerNpm.trim().length > 0) {
+      return providerNpm
+    }
+  }
+
+  return OPENAI_PROVIDER_NPM
+}
+
+function getImageToolResultsApiKey(value: unknown): string {
+  if (value && typeof value === 'object') {
+    const apiKey = (value as any).apiKey
+    if (typeof apiKey === 'string' && apiKey.trim().length > 0) {
+      return apiKey
+    }
+  }
+
+  return 'ollama'
+}
+
+function applyImageToolResultsCompatibility(model: any, providerNpm: string): any {
+  const input = new Set<string>(model.modalities?.input ?? ['text'])
+  input.add('text')
+  input.add('image')
+
+  const output = new Set<string>(model.modalities?.output ?? ['text'])
+  output.add('text')
+
+  return {
+    ...model,
+    attachment: true,
+    tool_call: model.tool_call ?? true,
+    modalities: {
+      ...model.modalities,
+      input: Array.from(input),
+      output: Array.from(output),
+    },
+    provider: {
+      ...model.provider,
+      npm: providerNpm,
+    },
+  }
+}
 
 function getInjectedModels(config: object, providerID: string): Map<string, unknown> {
   return injectedModelsByConfig.get(config)?.get(providerID) ?? new Map()
@@ -218,6 +269,8 @@ export async function enhanceConfig(
       const modelInfoFormat = providerDiscoveryConfig.modelInfoFormat
       const filterNonChat = providerDiscoveryConfig.filterNonChat !== false
       const forceDiscoveryEnabled = providerDiscoveryConfig.enabled === true
+      const imageToolResults = providerDiscoveryConfig.imageToolResults
+      const imageToolResultsEnabled = isImageToolResultsEnabled(imageToolResults)
 
       if (!forceDiscoveryEnabled && !canDiscoverModels(p)) {
         continue
@@ -235,6 +288,10 @@ export async function enhanceConfig(
         baseURL = normalizeBaseURL(p.options.baseURL)
       } else {
         continue
+      }
+
+      if (imageToolResultsEnabled && typeof p.options.apiKey !== 'string') {
+        p.options.apiKey = getImageToolResultsApiKey(imageToolResults)
       }
 
       const cacheConfig = providerDiscoveryConfig.cache
@@ -376,18 +433,24 @@ export async function enhanceConfig(
         modelID,
         mergeModelOverride(model, persistedState?.overrides?.[modelID]),
       ]))
+      const finalDiscoveredModels = imageToolResultsEnabled
+        ? Object.fromEntries(Object.entries(modelsWithOverrides).map(([modelID, model]) => [
+          modelID,
+          applyImageToolResultsCompatibility(model, getImageToolResultsProviderNpm(imageToolResults)),
+        ]))
+        : modelsWithOverrides
 
       p.models = {
-        ...modelsWithOverrides,
+        ...finalDiscoveredModels,
         ...existingModels,
       }
-      replaceInjectedModels(config, providerName, modelsWithOverrides)
+      replaceInjectedModels(config, providerName, finalDiscoveredModels)
 
-      if (Object.keys(modelsWithOverrides).length > 0) {
+      if (Object.keys(finalDiscoveredModels).length > 0) {
         openAICompatibleProviders.push({
           name: displayName,
           baseURL,
-          models: modelsWithOverrides
+          models: finalDiscoveredModels
         })
       }
     }

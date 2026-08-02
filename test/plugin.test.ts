@@ -499,6 +499,86 @@ describe('ModelDiscovery Plugin', () => {
       }))
     })
 
+    it('marks opted-in discovered models as OpenAI image-tool-result compatible', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [
+            { id: 'qwen3.5:35b-256k', object: 'model', created: 1234567890, owned_by: 'local' }
+          ]
+        })
+      })
+
+      const config: any = {
+        provider: {
+          ollama: {
+            npm: '@ai-sdk/openai-compatible',
+            name: 'Ollama',
+            options: {
+              baseURL: 'http://127.0.0.1:11434/v1',
+              modelsDiscovery: {
+                enabled: true,
+                imageToolResults: true,
+              }
+            },
+            models: {}
+          }
+        }
+      }
+
+      await pluginHooks.config(config)
+
+      expect(config.provider.ollama.options.apiKey).toBe('ollama')
+      expect(config.provider.ollama.models['qwen3.5:35b-256k']).toEqual(expect.objectContaining({
+        id: 'qwen3.5:35b-256k',
+        attachment: true,
+        tool_call: true,
+        modalities: {
+          input: ['text', 'image'],
+          output: ['text'],
+        },
+        provider: {
+          npm: '@ai-sdk/openai',
+        },
+      }))
+    })
+
+    it('supports custom image tool result provider npm and api key', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [
+            { id: 'custom-vision-model', object: 'model', created: 1234567890, owned_by: 'local' }
+          ]
+        })
+      })
+
+      const config: any = {
+        provider: {
+          local: {
+            npm: '@ai-sdk/openai-compatible',
+            options: {
+              baseURL: 'http://127.0.0.1:8000/v1',
+              modelsDiscovery: {
+                enabled: true,
+                imageToolResults: {
+                  enabled: true,
+                  providerNpm: '@ai-sdk/openai',
+                  apiKey: 'local-key',
+                },
+              }
+            },
+            models: {}
+          }
+        }
+      }
+
+      await pluginHooks.config(config)
+
+      expect(config.provider.local.options.apiKey).toBe('local-key')
+      expect(config.provider.local.models['custom-vision-model'].provider.npm).toBe('@ai-sdk/openai')
+    })
+
     it('uses a fresh persisted inventory without resolving credentials or requesting models', async () => {
       const store = new ProviderModelStore(cacheRoot)
       await store.saveModels({
@@ -839,7 +919,7 @@ describe('ModelDiscovery Plugin', () => {
 
       await pluginHooks.config(config)
 
-      expect(readFileSpy).toHaveBeenCalledWith(expect.stringMatching(/\/opencode\/auth\.json$/), 'utf8')
+      expect(readFileSpy).toHaveBeenCalledWith(expect.stringMatching(/[\\/]opencode[\\/]auth\.json$/), 'utf8')
       expect(config.provider.test_provider.models['host-auth-model']).toBeDefined()
       expect(mockFetch).toHaveBeenCalledWith('http://127.0.0.1:4000/v1/models', expect.objectContaining({
         method: 'GET',
@@ -880,7 +960,7 @@ describe('ModelDiscovery Plugin', () => {
 
       await pluginHooks.config(config)
 
-      expect(readFileSpy).toHaveBeenCalledWith(expect.stringMatching(/\/opencode\/auth\.json$/), 'utf8')
+      expect(readFileSpy).toHaveBeenCalledWith(expect.stringMatching(/[\\/]opencode[\\/]auth\.json$/), 'utf8')
       expect(config.provider.test_provider.models['default-host-auth-model']).toBeDefined()
       expect(mockFetch).toHaveBeenCalledWith('http://127.0.0.1:4000/v1/models', expect.objectContaining({
         method: 'GET',
@@ -924,7 +1004,7 @@ describe('ModelDiscovery Plugin', () => {
 
       await pluginHooks.config(config)
 
-      expect(readFileSpy).toHaveBeenCalledWith(expect.stringMatching(/\/mimocode\/auth\.json$/), 'utf8')
+      expect(readFileSpy).toHaveBeenCalledWith(expect.stringMatching(/[\\/]mimocode[\\/]auth\.json$/), 'utf8')
       expect(config.provider.test_provider.models['mimo-auth-model']).toBeDefined()
       expect(mockFetch).toHaveBeenCalledWith('http://127.0.0.1:4000/v1/models', expect.objectContaining({
         method: 'GET',

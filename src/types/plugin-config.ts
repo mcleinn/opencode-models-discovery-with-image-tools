@@ -42,12 +42,19 @@ export interface ProviderDiscoveryCacheConfig {
   ttlSeconds?: number
 }
 
+export interface ImageToolResultsConfig {
+  enabled?: boolean
+  providerNpm?: string
+  apiKey?: string
+}
+
 export interface ProviderDiscoveryConfig {
   enabled?: boolean
   endpoint?: string
   modelInfoEndpoint?: string
   modelInfoFormat?: ModelInfoFormat
   filterNonChat?: boolean
+  imageToolResults?: boolean | ImageToolResultsConfig
   models?: {
     includeRegex?: string[]
     excludeRegex?: string[]

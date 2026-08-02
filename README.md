@@ -182,6 +182,30 @@ For LiteLLM-compatible model info endpoints, `/v1/model/info` is used by default
 
 If metadata cannot be fetched or matched safely, discovery still succeeds and the plugin leaves unknown capability fields unset rather than guessing defaults. See [`docs/providers.md`](docs/providers.md#modelsdev-metadata-enrichment) for details.
 
+## Image Tool Results for Local OpenAI-Compatible Models
+
+OpenCode only treats some AI SDK providers as supporting image attachments in tool results. If your local OpenAI-compatible endpoint accepts OpenAI-style `image_url` payloads, enable image tool result compatibility per provider:
+
+```json
+{
+  "provider": {
+    "ollama-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Local Ollama",
+      "options": {
+        "baseURL": "http://127.0.0.1:11435/v1",
+        "modelsDiscovery": {
+          "enabled": true,
+          "imageToolResults": true
+        }
+      }
+    }
+  }
+}
+```
+
+When enabled, discovered models are marked with image input support and per-model `provider.npm = "@ai-sdk/openai"`. This makes OpenCode use its image-capable OpenAI tool-result path while keeping dynamic model discovery. If no API key is configured, the plugin sets `options.apiKey = "ollama"` for that provider; override it with `imageToolResults.apiKey` when your endpoint requires a specific key.
+
 ## Upgrade Note
 
 If you upgrade the plugin and OpenCode still behaves like it is using an older build, refresh the OpenCode plugin cache and restart OpenCode.
